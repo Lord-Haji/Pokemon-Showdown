@@ -476,8 +476,8 @@ exports.commands = {
 				return '<font color="#686868">' + detail + ':</font> ' + details[detail];
 			}).join("&nbsp;|&ThickSpace;") + '</font>';
 
-			if (isSnatch) buffer += '&nbsp;|&ThickSpace;<a href="https://pokemonshowdown.com/dex/moves/snatch"><font size="1">Snatchable Moves</font></a>';
-			if (isMirrorMove) buffer += '&nbsp;|&ThickSpace;<a href="https://pokemonshowdown.com/dex/moves/mirrormove"><font size="1">Mirrorable Moves</font></a>';
+			if (isSnatch) buffer += '&nbsp;|&ThickSpace;<a href="https://dex.pokemonshowdown.com/moves/snatch"><font size="1">Snatchable Moves</font></a>';
+			if (isMirrorMove) buffer += '&nbsp;|&ThickSpace;<a href="https://dex.pokemonshowdown.com/moves/mirrormove"><font size="1">Mirrorable Moves</font></a>';
 		}
 		this.sendReply(buffer);
 	},
