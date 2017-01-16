@@ -519,7 +519,7 @@ class CommandContext {
 			if (!this.canBroadcast(suppressMessage)) return false;
 		}
 
-		let msg = '|c|' + this.user.getIdentity(this.room.id) + '|' + (suppressMessage || this.message);
+		let msg = '|c|' + this.user.getIdentity((this.room ? this.room.id : false)) + '|' + (suppressMessage || this.message);
 		if (this.pmTarget) msg = '|c~|' + (suppressMessage || this.message);
 		if (Users.ShadowBan.checkBanned(this.user)) {
 			this.sendReply(msg);
