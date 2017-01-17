@@ -146,6 +146,19 @@ if (!Rooms.global.lotteryDraw) {
 }
 
 exports.commands = {
+	resetbucks: function (target, room, user, connection) {
+		if (!user.hasConsoleAccess(connection)) return this.errorReply("/resetbucks - Access denied.");
+		if (!user.confirmResetBucks || !target || target !== user.confirmResetBucks) {
+			user.confirmResetBucks = Wisp.randomString(5);
+			return this.errorReply("WARNING: This will remove all bucks from the economy. If you are sure you want to do this send the following command: /resetbucks " + user.confirmResetBucks);
+		}
+
+		Wisp.database.run("UPDATE users SET bucks=$amount", {$amount: 0}, err => {
+			if (err) return console.log("resetBucks: " + err);
+			return this.errorReply("The economy has been reset.");
+		});
+	},
+
 	lottery: function (target, room, user) {
 		if (!this.runBroadcast()) return;
 		if (lottery.length < 1) return this.sendReplyBox("No one has purchased any lottery tickets for this lottery.");

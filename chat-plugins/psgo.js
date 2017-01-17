@@ -273,6 +273,25 @@ exports.commands = {
 	claimpackhelp: ["/claimpack [pack] - Claims a psgo pack after you've bought a ticket."],
 
 	psgo: {
+		reset: function (target, room, user, connection) {
+			if (!user.hasConsoleAccess(connection)) return this.errorReply("/psgo reset - Access denied.");
+			if (!user.confirmResetPSGO || !target || target !== user.confirmResetPSGO) {
+				user.confirmResetPSGO = Wisp.randomString(5);
+				return this.errorReply("WARNING: This will remove every PSGO card from every user. If you are sure you want to do this send the following command: /psgo reset " + user.confirmResetPSGO);
+			}
+
+			database.run("DELETE FROM cards", err => {
+				if (err) return this.errorReply("Error resetting PSGO cards: " + err);
+				database.run("DELETE FROM cardladder", err => {
+					if (err) return this.errorReply("Error resetting PSGO cards: " + err);
+					database.run("DELETE FROM trades", err => {
+						if (err) return this.errorReply("Error resetting PSGO cards: " + err);
+						return this.errorReply("All PSGO cards in circulation have been removed.");
+					});
+				});
+			});
+		},
+
 		set: 'add',
 		add: function (target, room, user) {
 			if (!user.can('hotpatch') && !managers.includes(user.userid)) return this.errorReply("Access denied.");
