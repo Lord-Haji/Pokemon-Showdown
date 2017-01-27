@@ -18,11 +18,6 @@ try {
 	monData = fs.readFileSync("data/WSSB.txt").toString().split("\n\n");
 } catch (e) {}
 
-Wisp.autoJoinRooms = {};
-try {
-	Wisp.autoJoinRooms = JSON.parse(fs.readFileSync('config/autojoin.json', 'utf8'));
-} catch (e) {}
-
 Wisp.tells = {};
 try {
 	Wisp.tells = JSON.parse(fs.readFileSync('config/tells.json', 'utf*'));
