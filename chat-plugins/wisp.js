@@ -1400,10 +1400,6 @@ Object.assign(Wisp, {
 		}
 	},
 
-	saveAutoJoins: function () {
-		fs.writeFileSync('config/autojoin.json', JSON.stringify(Wisp.autoJoinRooms));
-	},
-
 	getTells: function (user) {
 		let tell = Wisp.tells[user.userid];
 		if (!tell) return;
