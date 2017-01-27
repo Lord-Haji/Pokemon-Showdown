@@ -1135,10 +1135,6 @@ class User {
 
 		let joinResult = this.joinRoom(room, connection);
 		if (!joinResult) {
-			if (Wisp.autoJoinRooms[this.userid] && Wisp.autoJoinRooms[this.userid].includes(room.id)) {
-				Wisp.autoJoinRooms[this.userid].splice(Wisp.autoJoinRooms[this.userid].indexOf(room.id), 1);
-				Wisp.saveAutoJoins();
-			}
 			if (joinResult === null) {
 				connection.sendTo(roomid, `|noinit|joinfailed|You are banned from the room "${roomid}".`);
 				return false;
