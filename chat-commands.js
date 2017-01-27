@@ -1428,11 +1428,6 @@ exports.commands = {
 			return this.errorReply("The room '" + target + "' does not exist.");
 		}
 		user.leaveRoom(targetRoom, connection);
-		if (user.named && user.registered) {
-			if (Wisp.autoJoinRooms[user.userid] && Wisp.autoJoinRooms[user.userid].includes(targetRoom.id)) {
-				Wisp.autoJoinRooms[user.userid].splice(Wisp.autoJoinRooms[user.userid].indexOf(targetRoom.id), 1);
-				Wisp.saveAutoJoins();
-			}
 		}
 	},
 
