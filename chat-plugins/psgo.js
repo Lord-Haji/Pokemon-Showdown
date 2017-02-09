@@ -570,7 +570,7 @@ exports.commands = {
 		},
 	},
 	psgohelp: [
-		"PSGO Adminsitrator Commands:",
+		"PSGO Administrator Commands:",
 		"/psgo add [id], [name], [card image], [rarity], [points], [collection(s)] (ex: XY-Promo, XY-Roaring Skies) - Adds a card.",
 		"/psgo edit [id], [name], [card image], [rarity], [points], [collection(s)] (ex: XY-Promo, XY-Roaring Skies) - Edits a card.",
 		"/psgo delete [id] - Deletes a card.",
