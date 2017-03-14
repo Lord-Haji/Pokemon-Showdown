@@ -99,6 +99,10 @@ if (Config.watchconfig) {
  * Set up most of our globals
  *********************************************************/
 
+global.sqlite3 = require('sqlite3');
+
+global.Db = require('origindb')('config/db');
+
 global.Monitor = require('./monitor');
 
 global.Tools = require('./tools');
@@ -111,6 +115,8 @@ global.Ladders = require(Config.remoteladder ? './ladders-remote' : './ladders')
 global.Users = require('./users');
 
 global.Punishments = require('./punishments');
+
+global.Wisp = {};
 
 global.Chat = require('./chat');
 
@@ -174,4 +180,5 @@ TeamValidator.PM.spawn();
  * Start up the REPL server
  *********************************************************/
 
+require('./github.js');
 require('./repl').start('app', cmd => eval(cmd));

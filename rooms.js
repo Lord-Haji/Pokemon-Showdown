@@ -42,6 +42,8 @@ class Room {
 
 		this.muteQueue = [];
 		this.muteTimer = null;
+		this.messageCount = 0;
+		this.declareIds = [];
 
 		this.type = 'chat';
 		this.lastUpdate = 0;
@@ -89,6 +91,9 @@ class Room {
 	logEntry() {}
 	addRaw(message) {
 		return this.add('|raw|' + message);
+	}
+	addLogMessage(user, text) {
+		return this.add('|c|' + user.getIdentity(this) + '|/log ' + text).update();
 	}
 	getLogSlice(amount) {
 		let log = this.log.slice(amount);
@@ -146,6 +151,7 @@ class Room {
 			if (user.userid in this.auth) {
 				return this.auth[user.userid];
 			}
+			if (this.autorank) return this.autorank;
 			if (this.tour && this.tour.room) {
 				return this.tour.room.getAuth(user);
 			}
@@ -199,6 +205,9 @@ class Room {
 		this.runMuteTimer();
 
 		user.updateIdentity(this.id);
+
+		if (!(this.isPrivate === true || this.isPersonal || this.battle)) Punishments.monitorRoomPunishments(user);
+
 		return userid;
 	}
 	unmute(userid, notifyText) {
@@ -253,6 +262,7 @@ class GlobalRoom {
 	constructor(roomid) {
 		this.id = roomid;
 
+		this.declareIds = [];
 		this.type = 'global';
 
 		// init battle rooms
@@ -397,17 +407,18 @@ class GlobalRoom {
 			return this.formatList;
 		}
 		this.formatList = '|formats' + (Ladders.formatsListPrefix || '');
-		let curSection = '';
+		let section = '', prevSection = '';
+		let curColumn = 1;
 		for (let i in Tools.data.Formats) {
 			let format = Tools.data.Formats[i];
+			if (format.section) section = format.section;
+			if (format.column) curColumn = format.column;
+			if (!format.name) continue;
 			if (!format.challengeShow && !format.searchShow && !format.tournamentShow) continue;
 
-			let section = format.section;
-			if (section === undefined) section = format.mod;
-			if (!section) section = '';
-			if (section !== curSection) {
-				curSection = section;
-				this.formatList += '|,' + (format.column || 1) + '|' + section;
+			if (section !== prevSection) {
+				prevSection = section;
+				this.formatList += '|,' + curColumn + '|' + section;
 			}
 			this.formatList += '|' + format.name;
 			let displayCode = 0;
@@ -423,12 +434,14 @@ class GlobalRoom {
 	getRoomList(filter) {
 		let rooms = [];
 		let skipCount = 0;
-		if (this.battleCount > 150 && !filter) {
+		let [formatFilter, eloFilter] = filter.split(',');
+		if (this.battleCount > 150 && !formatFilter && !eloFilter) {
 			skipCount = this.battleCount - 150;
 		}
 		Rooms.rooms.forEach(room => {
 			if (!room || !room.active || room.isPrivate) return;
-			if (filter && filter !== room.format && filter !== true) return;
+			if (formatFilter && formatFilter !== room.format) return;
+			if (eloFilter && (!room.rated || room.rated < eloFilter)) return;
 			if (skipCount && skipCount--) return;
 
 			rooms.push(room);
@@ -526,7 +539,7 @@ class GlobalRoom {
 
 		// search must be within range
 		let searchRange = 100, elapsed = Date.now() - Math.min(search1.time, search2.time);
-		if (formatid === 'ou' || formatid === 'oucurrent' || formatid === 'randombattle') searchRange = 50;
+		if (formatid === 'ou' || formatid === 'oucurrent' || formatid === 'oususpecttest' || formatid === 'randombattle') searchRange = 50;
 		searchRange += elapsed / 300; // +1 every .3 seconds
 		if (searchRange > 300) searchRange = 300 + (searchRange - 300) / 10; // +1 every 3 sec after 300
 		if (searchRange > 600) searchRange = 600;
@@ -617,7 +630,7 @@ class GlobalRoom {
 	}
 	addChatRoom(title) {
 		let id = toId(title);
-		if (id === 'battles' || id === 'rooms' || id === 'ladder' || id === 'teambuilder') return false;
+		if (id === 'battles' || id === 'rooms' || id === 'ladder' || id === 'teambuilder' || id === 'home') return false;
 		if (Rooms.rooms.has(id)) return false;
 
 		let chatRoomData = {
@@ -689,6 +702,7 @@ class GlobalRoom {
 				// if staffAutojoin is anything truthy: autojoin if user has any roomauth
 				user.joinRoom(room.id, connection);
 			}
+			if (user.can('seniorstaff')) user.joinRoom('upperstaff');
 		}
 		for (let i = 0; i < user.connections.length; i++) {
 			connection = user.connections[i];
@@ -698,6 +712,14 @@ class GlobalRoom {
 					user.tryJoinRoom(autojoins[j], connection);
 				}
 				connection.autojoins = '';
+			}
+		}
+		for (let i = 0; i < user.connections.length; i++) {
+			connection = user.connections[i];
+			if (Wisp.autoJoinRooms[user.userid]) {
+				for (let u = 0; u < Wisp.autoJoinRooms[user.userid].length; u++) {
+					user.tryJoinRoom(Wisp.autoJoinRooms[user.userid][u], connection);
+				}
 			}
 		}
 	}
@@ -716,11 +738,18 @@ class GlobalRoom {
 			this.maxUsersDate = Date.now();
 		}
 
+		Wisp.getTells(user);
+		Wisp.friendsNotify(user.userid);
+		Wisp.updateSeen(user.name);
 		return user;
 	}
 	onRename(user, oldid, joining) {
 		delete this.users[oldid];
 		this.users[user.userid] = user;
+
+		Wisp.getTells(user);
+		if (oldid !== user.userid) Wisp.friendsNotify(user.userid);
+		Wisp.updateSeen(user.name);
 		return user;
 	}
 	onUpdateIdentity() {}
@@ -730,6 +759,7 @@ class GlobalRoom {
 		--this.userCount;
 		user.cancelChallengeTo();
 		this.cancelSearch(user);
+		Wisp.friendsNotify(user.userid, true);
 	}
 	startBattle(p1, p2, format, p1team, p2team, options) {
 		p1 = Users.get(p1);
@@ -1037,7 +1067,7 @@ class BattleRoom extends Room {
 			fs.mkdir(curpath, '0755', () => {
 				curpath += '/' + logsubfolder;
 				fs.mkdir(curpath, '0755', () => {
-					fs.writeFile(curpath + '/' + this.id + '.log.json', JSON.stringify(logData));
+					fs.writeFile(curpath + '/' + this.id + '.log.json', JSON.stringify(logData), () => {});
 				});
 			});
 		}); // asychronicity
@@ -1535,11 +1565,16 @@ class ChatRoom extends Room {
 	}
 	getIntroMessage(user) {
 		let message = '';
-		if (this.introMessage) message += '\n|raw|<div class="infobox infobox-roomintro"><div' + (!this.isOfficial ? ' class="infobox-limited"' : '') + '>' + this.introMessage.replace(/\n/g, '') + '</div>';
-		if (this.staffMessage && user.can('mute', null, this)) message += (message ? '<br />' : '\n|raw|<div class="infobox">') + '(Staff intro:)<br /><div>' + this.staffMessage.replace(/\n/g, '') + '</div>';
+		if (this.introMessage) message += '\n|raw|<div class="infobox infobox-roomintro">' + this.introMessage + '</div>';
+		if (this.staffMessage && user.can('mute', null, this)) message += (message ? '<br />' : '\n|raw|<div class="infobox">') + '(Staff intro:)<br /><div>' + this.staffMessage + '</div>';
 		if (this.modchat) {
 			message += (message ? '<br />' : '\n|raw|<div class="infobox">') + '<div class="broadcast-red">' +
 				'Must be rank ' + this.modchat + ' or higher to talk right now.' +
+				'</div>';
+		}
+		if (this.slowchat && user.can('mute', null, this)) {
+			message += (message ? '<br />' : '\n|raw|<div class="infobox">') + '<div class="broadcast-red">' +
+				'Messages must have at least ' + this.slowchat + ' seconds between them.' +
 				'</div>';
 		}
 		if (message) message += '</div>';
@@ -1704,3 +1739,18 @@ if (!Config.quietconsole) console.log("NEW GLOBAL: global");
 Rooms.global = new GlobalRoom('global');
 
 Rooms.rooms.set('global', Rooms.global);
+
+
+/*setTimeout(function () {
+	for (let room in Rooms.rooms) {
+		let curRoom = Rooms.rooms[room];
+		if (curRoom.type === 'chat' && !curRoom.protect && !curRoom.isOfficial && !curRoom.isPrivate && !curRoom.isPersonal && !curRoom.isStaff && curRoom.messageCount < 50) {
+			Rooms.global.deregisterChatRoom(curRoom.id);
+			curRoom.addRaw('<font color=red><b>This room has been automatically deleted due to inactivity.  It will be removed upon the next server restart.</b></font>');
+			if (curRoom.id !== 'global') curRoom.update();
+			curRoom.modchat = '~';
+			curRoom.isPrivate = 'hidden';
+			Rooms('staff').add("|raw|<font color=red><b>" + Chat.escapeHTML(curRoom.title) + " has been automatically deleted from the server due to inactivity.</b></font>").update();
+		}
+	}
+}, 5 * 24 * 60 * 60 * 1000);*/

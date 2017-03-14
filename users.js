@@ -245,7 +245,7 @@ Users.isTrusted = function (name) {
 	if (userid in usergroups) return userid;
 	for (let i = 0; i < Rooms.global.chatRooms.length; i++) {
 		let curRoom = Rooms.global.chatRooms[i];
-		if (!curRoom.isPrivate && !curRoom.isPersonal && curRoom.auth && userid in curRoom.auth && curRoom.auth[userid] !== '+') return userid;
+		if (!curRoom.isPrivate && !curRoom.isPersonal && curRoom.isOfficial && curRoom.auth && userid in curRoom.auth && curRoom.auth[userid] !== '+') return userid;
 	}
 	return false;
 };
@@ -409,8 +409,14 @@ class User {
 			if (room.isMuted(this)) {
 				return '!' + this.name;
 			}
+			if (this.hideauth) return this.hideauth + this.name;
+			if (this.group !== ' ' && room && room.auth && !this.hideauth) {
+				if (Config.groupsranking.indexOf(this.group) > Config.groupsranking.indexOf(room.getAuth(this))) return this.group + this.name;
+			}
 			return room.getAuth(this) + this.name;
 		}
+		if (this.hideauth) return this.hideauth + this.name;
+		if (this.customSymbol) return this.customSymbol + this.name;
 		return this.group + this.name;
 	}
 	authAtLeast(minAuth, room) {
@@ -443,6 +449,9 @@ class User {
 		} else {
 			group = this.group;
 			if (target) targetGroup = target.group;
+		}
+		if (this.group !== ' ' && room && room.auth) {
+			if (Config.groupsranking.indexOf(this.group) > Config.groupsranking.indexOf(room.getAuth(this))) group = this.group;
 		}
 
 		groupData = Config.groups[group];
@@ -753,6 +762,7 @@ class User {
 		return false;
 	}
 	forceRename(name, registered) {
+		Wisp.updateSeen(name);
 		// skip the login server
 		let userid = toId(name);
 
@@ -937,7 +947,9 @@ class User {
 			this.namelocked = false;
 		}
 		if (this.autoconfirmed && this.semilocked) {
-			if (this.semilocked === '#dnsbl') {
+			if (this.semilocked.startsWith('#sharedip')) {
+				this.semilocked = false;
+			} else if (this.semilocked === '#dnsbl') {
 				this.popup(`You are locked because someone using your IP has spammed/hacked other websites. This usually means you're using a proxy, in a country where other people commonly hack, or have a virus on your computer that's spamming websites.`);
 				this.semilocked = '#dnsbl.';
 			}
@@ -1005,6 +1017,7 @@ class User {
 		}
 	}
 	onDisconnect(connection) {
+		Wisp.updateSeen(this.name);
 		for (let i = 0; i < this.connections.length; i++) {
 			if (this.connections[i] === connection) {
 				// console.log('DISCONNECT: ' + this.userid);
@@ -1022,7 +1035,7 @@ class User {
 		if (!this.connections.length) {
 			// cleanup
 			this.inRooms.forEach(roomid => {
-				// should never happen.
+					// should never happen.
 				Monitor.debug(`!! room miscount: ${roomid} not left`);
 				Rooms(roomid).onLeave(this);
 			});
@@ -1053,7 +1066,7 @@ class User {
 			throw new Error(`Failed to drop all connections for ${this.userid}`);
 		}
 		this.inRooms.forEach(roomid => {
-			// should never happen.
+				// should never happen.
 			throw new Error(`Room miscount: ${roomid} not left for ${this.userid}`);
 		});
 		this.inRooms.clear();
@@ -1094,7 +1107,11 @@ class User {
 			if (!this.named) {
 				return null;
 			} else {
-				connection.sendTo(roomid, `|noinit|nonexistent|The room "${roomid}" does not exist.`);
+				connection.sendTo(roomid, "|noinit|nonexistent|The room '" + roomid + "' does not exist.");
+				if (Wisp.autoJoinRooms[this.userid] && Wisp.autoJoinRooms[this.userid].includes(roomid)) {
+					Wisp.autoJoinRooms[this.userid].splice(Wisp.autoJoinRooms[this.userid].indexOf(roomid), 1);
+					Wisp.saveAutoJoins();
+				}
 				return false;
 			}
 		}
@@ -1118,6 +1135,10 @@ class User {
 
 		let joinResult = this.joinRoom(room, connection);
 		if (!joinResult) {
+			if (Wisp.autoJoinRooms[this.userid] && Wisp.autoJoinRooms[this.userid].includes(room.id)) {
+				Wisp.autoJoinRooms[this.userid].splice(Wisp.autoJoinRooms[this.userid].indexOf(room.id), 1);
+				Wisp.saveAutoJoins();
+			}
 			if (joinResult === null) {
 				connection.sendTo(roomid, `|noinit|joinfailed|You are banned from the room "${roomid}".`);
 				return false;
@@ -1130,6 +1151,7 @@ class User {
 	joinRoom(room, connection) {
 		room = Rooms(room);
 		if (!room) return false;
+		if (room.id === 'upperstaff' && !this.can('seniorstaff')) return false;
 		if (!this.can('bypassall')) {
 			// check if user has permission to join
 			if (room.staffRoom && !this.isStaff) return false;
@@ -1156,11 +1178,21 @@ class User {
 			connection.joinRoom(room);
 			room.onConnect(this, connection);
 		}
+		if (this.named && this.registered && room.type === 'chat') {
+			if (!Wisp.autoJoinRooms[this.userid]) Wisp.autoJoinRooms[this.userid] = [];
+			if (Wisp.autoJoinRooms[this.userid].length < Config.maxAutoJoinRooms) {
+				if (Wisp.autoJoinRooms[this.userid].indexOf(room.id) === -1) {
+					Wisp.autoJoinRooms[this.userid].push(room.id);
+					Wisp.saveAutoJoins();
+				}
+			}
+		}
 		return true;
 	}
 	leaveRoom(room, connection, force) {
 		room = Rooms(room);
 		if (room.id === 'global' && !force) {
+			Wisp.updateSeen(this.name);
 			// you can't leave the global room except while disconnecting
 			return false;
 		}
